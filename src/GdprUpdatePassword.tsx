@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef  } from "react";
 import axios from 'axios';
 // @ts-ignore
 import toastr from 'toastr';
@@ -18,6 +18,43 @@ export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUp
   const [company, setCompany] = useState(initialCompany || '');
   const [companyError, setCompanyError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // For engagement tracking
+  const [sessionTime, setSessionTime] = useState(0);  // Total session time in seconds
+  const [engagementTime, setEngagementTime] = useState(0);  // Total time the user was engaged (focused)
+  const engagedRef = useRef(false);  // Tracks whether the user is currently engaged
+  const startTimeRef = useRef(Date.now());  // Time when the user opened the page or became engaged
+
+  // Initialize session and engagement tracking
+  useEffect(() => {
+    // Update session time every second
+    const sessionInterval = setInterval(() => {
+      setSessionTime((prev) => prev + 1);
+      if (engagedRef.current) {
+        setEngagementTime((prev) => prev + 1);
+      }
+    }, 1000);
+
+    // Add event listeners for focus and blur
+    const handleFocus = () => {
+      engagedRef.current = true;
+      startTimeRef.current = Date.now();
+    };
+
+    const handleBlur = () => {
+      engagedRef.current = false;
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+
+    // Cleanup on unmount
+    return () => {
+      clearInterval(sessionInterval);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
 
   const validateForm = () => {
     setPasswordError('');
@@ -64,10 +101,12 @@ export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUp
 
     try {
       setSaving(true);
-      await saveGdpr(gdpr, company);
+      const engagement = Math.round((engagementTime / sessionTime) * 100);
+
+      await saveGdpr({gdpr, company, sessionTime, engagement});
       await savePassword(passwordFirst);
 
-      toastr.success('Password and GDPR settings saved successfully.');
+      toastr.success(`Password and GDPR settings saved successfully. Session time: ${sessionTime}s, Engagement: ${engagement}%.`);
 
       if (redirect) {
         setTimeout(() => {
@@ -96,6 +135,8 @@ export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUp
     setCompany(initialCompany || '');
     setCompanyError('');
     setSaving(false);
+    setSessionTime(0);
+    setEngagementTime(0);
   };
 
   return isMobileDevice() ? (
@@ -132,17 +173,25 @@ export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUp
   );
 }
 
-interface SaveResponse {
+type SaveResponse = {
   success: boolean;
   error?: string;
-
 }
 
-const saveGdpr = async (gdpr: boolean, company: string): Promise<SaveResponse> => {
+type SaveGdprParams = {
+  gdpr: boolean;
+  company: string;
+  sessionTime: number;
+  engagement: number;
+}
+
+const saveGdpr = async ({gdpr, company, sessionTime, engagement}: SaveGdprParams): Promise<SaveResponse> => {
   try {
     const response = await axios.post<SaveResponse>('/manage/settings/general/save-gdpr', {
       gdpr,
       company,
+      sessionTime,
+      engagement
     });
 
     return response.data; // Return the server response data
