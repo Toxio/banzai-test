@@ -1,5 +1,8 @@
 import { useState } from "react";
 import axios from 'axios';
+// @ts-ignore
+import toastr from 'toastr';
+import 'toastr/build/toastr.min.css';
 import { GdprOptIn, PasswordForm } from './components';
 
 type GdprUpdatePasswordProps = {
@@ -16,31 +19,64 @@ export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUp
   const [companyError, setCompanyError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const handleSaveClick = async () => {
-    if (saving) return;
+  const validateForm = () => {
+    setPasswordError('');
+    setCompanyError('');
 
+    // Validate password according to the requirements
+    if (!validatePassword(passwordFirst)) {
+      const error = "Password must be at least 8 characters long, contain at least one uppercase letter, and one number.";
+      setPasswordError(error);
+      toastr.error(error);
+      return false;
+    }
+
+    // Validation for password mismatch
     if (passwordFirst !== passwordSecond) {
-      setPasswordError("Passwords don't match.");
-      return;
+      const error = "Passwords don't match.";
+      setPasswordError(error);
+      toastr.error(error);
+      return false;
     }
+
+    // Additional validation for empty password
+    if (!passwordFirst) {
+      const error = "Please, enter your password.";
+      setPasswordError(error);
+      toastr.error(error);
+      return false;
+    }
+
     if (gdpr && !company) {
-      setCompanyError("Please, enter your company name.");
-      return;
+      const error = 'Please, enter your company name.'
+      setCompanyError(error);
+      toastr.error(error);
+      return false;
     }
+
+    return true // Validation successful
+  }
+
+  const handleSaveClick = async () => {
+    const isValid = validateForm();
+
+    if (saving || !isValid) return;
 
     try {
+      setSaving(true);
       await saveGdpr(gdpr, company);
       await savePassword(passwordFirst);
 
+      toastr.success('Password and GDPR settings saved successfully.');
+
       if (redirect) {
         setTimeout(() => {
-          // Use navigate instead of window.location.href if we use React Router's
-          // navigate(redirect);
           window.location.href = redirect;
         }, 5000);
       }
     } catch (error) {
       console.error("Save failed", error);
+      toastr.error(error || "An error occurred while saving.");
     } finally {
       setSaving(false);
     }
@@ -143,5 +179,10 @@ const savePassword = async (password: string): Promise<SaveResponse> => {
       throw new Error(error.message);
     }
   }
+};
+
+const validatePassword = (password: string) => {
+  const passwordRegex = /^(?=.*[A-Z])(?=.*\d)[A-Za-z\d]{8,}$/;
+  return passwordRegex.test(password);
 };
 
