@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import axios from 'axios';
+import { GdprOptIn, PasswordForm } from './components';
 
 type GdprUpdatePasswordProps = {
   redirect: string;
@@ -142,101 +143,5 @@ const savePassword = async (password: string): Promise<SaveResponse> => {
       throw new Error(error.message);
     }
   }
-};
-
-
-type PasswordFormProps = {
-  passwordFirst: string;
-  passwordSecond: string;
-  handleFirstPassChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleSecondPassChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  passwordError: string;
-}
-
-const PasswordForm = (
-  {
-    passwordFirst,
-    passwordSecond,
-    handleFirstPassChange,
-    handleSecondPassChange,
-    passwordError
-  }: PasswordFormProps) => {
-  return (
-    <div className="GdprUpdatePassword__pass pretty-form preferences-section">
-      <div className="header">
-        <div className="title">Step 1: Update your password</div>
-      </div>
-      <div className="body pretty-controls">
-        <div className="line">
-          <div className="form-group first">
-            <label className="nm">New Password:</label>
-            <small>Password length must be at least 8 characters containing at least 1 uppercase letter and 1
-              number.</small>
-            <input
-              className="input"
-              placeholder="Set your new password"
-              type="text"
-              value={passwordFirst}
-              onChange={handleFirstPassChange}
-            />
-          </div>
-          <div className="form-group second">
-            <label>Repeat New Password:</label>
-            <input
-              className="input"
-              placeholder="Repeat your new password"
-              type="text"
-              value={passwordSecond}
-              onChange={handleSecondPassChange}
-            />
-          </div>
-        </div>
-      </div>
-      {passwordError && <div className="footer">
-        <div className="error">{passwordError}</div>
-      </div>}
-    </div>
-  );
-};
-
-type GdprOptInProps = {
-  gdpr: boolean;
-  company: string;
-  handleCompanyChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleGdprChange: (value: boolean) => void;
-  companyError: string;
-}
-
-const GdprOptIn = ({ gdpr, company, handleCompanyChange, handleGdprChange, companyError }: GdprOptInProps) => {
-  return (
-    <div className="GdprUpdatePassword__opt-in pretty-form preferences-section">
-      <div className="header">
-        <div className="title">Step 2: Confirm your GDPR compliance settings.</div>
-      </div>
-      <div className="body">
-        <div className="text">
-          Enabling your GDPR compliance settings will disable certain features and require registrants to confirm their
-          request for more information.
-        </div>
-        <div className="line">
-          <div className="caption">Enable GDPR compliance settings</div>
-          <div className="switcher">
-            <div className={`item ${gdpr ? 'active' : ''}`} onClick={() => handleGdprChange(true)}>Active</div>
-            <div className={`item ${!gdpr ? 'active' : ''}`} onClick={() => handleGdprChange(false)}>Disabled</div>
-          </div>
-        </div>
-        <div className="line pretty-controls">
-          <div className="form-group">
-            <label>Company Name:</label>
-            <input className="input" placeholder="Enter your company name" value={company}
-                   onChange={handleCompanyChange} />
-          </div>
-        </div>
-        {companyError && <div className="footer">
-          <div className="error">{companyError}</div>
-        </div>}
-      </div>
-    </div>
-  );
 };
 
