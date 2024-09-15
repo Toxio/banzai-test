@@ -4,7 +4,7 @@ import { GdprUpdatePassword } from "./GdprUpdatePassword.tsx";
 function App() {
   return (
     <>
-     <h1>Banzai test task</h1>
+     <h2>Banzai test task</h2>
       <GdprUpdatePassword redirect='/' company=''/>
     </>
   )

@@ -1,13 +1,21 @@
-import { useState, useEffect, useRef  } from "react";
-import axios from 'axios';
+import { useState } from "react";
 // @ts-ignore
 import toastr from 'toastr';
 import 'toastr/build/toastr.min.css';
 import { GdprOptIn, PasswordForm } from './components';
+import { useSessionTracking } from './hooks/useSessionTracking.tsx';
+import { passwordValidation } from "./utils/passwordValidation.ts";
+import { saveGdpr, savePassword } from "./utils/apiRequests.ts";
 
 type GdprUpdatePasswordProps = {
   redirect: string;
   company: string;
+}
+
+type Company = {
+  name: string;
+  email: string;
+  location: string;
 }
 
 export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUpdatePasswordProps) {
@@ -15,53 +23,19 @@ export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUp
   const [passwordSecond, setPasswordSecond] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [gdpr, setGdpr] = useState(false);
-  const [company, setCompany] = useState(initialCompany || '');
+  const [company, setCompany] = useState({ name: initialCompany, email: "", location: "" });
   const [companyError, setCompanyError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // For engagement tracking
-  const [sessionTime, setSessionTime] = useState(0);  // Total session time in seconds
-  const [engagementTime, setEngagementTime] = useState(0);  // Total time the user was engaged (focused)
-  const engagedRef = useRef(false);  // Tracks whether the user is currently engaged
-  const startTimeRef = useRef(Date.now());  // Time when the user opened the page or became engaged
-
-  // Initialize session and engagement tracking
-  useEffect(() => {
-    // Update session time every second
-    const sessionInterval = setInterval(() => {
-      setSessionTime((prev) => prev + 1);
-      if (engagedRef.current) {
-        setEngagementTime((prev) => prev + 1);
-      }
-    }, 1000);
-
-    // Add event listeners for focus and blur
-    const handleFocus = () => {
-      engagedRef.current = true;
-      startTimeRef.current = Date.now();
-    };
-
-    const handleBlur = () => {
-      engagedRef.current = false;
-    };
-
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('blur', handleBlur);
-
-    // Cleanup on unmount
-    return () => {
-      clearInterval(sessionInterval);
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('blur', handleBlur);
-    };
-  }, []);
+  // Session and engagement tracking hooks
+  const { sessionTime, engagement } = useSessionTracking();
 
   const validateForm = () => {
     setPasswordError('');
     setCompanyError('');
 
     // Validate password according to the requirements
-    if (!validatePassword(passwordFirst)) {
+    if (!passwordValidation(passwordFirst)) {
       const error = "Password must be at least 8 characters long, contain at least one uppercase letter, and one number.";
       setPasswordError(error);
       toastr.error(error);
@@ -84,7 +58,7 @@ export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUp
       return false;
     }
 
-    if (gdpr && !company) {
+    if (gdpr && !company.name) {
       const error = 'Please, enter your company name.'
       setCompanyError(error);
       toastr.error(error);
@@ -101,15 +75,15 @@ export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUp
 
     try {
       setSaving(true);
-      const engagement = Math.round((engagementTime / sessionTime) * 100);
 
-      await saveGdpr({gdpr, company, sessionTime, engagement});
+      await saveGdpr({ gdpr, company, sessionTime, engagement });
       await savePassword(passwordFirst);
 
       toastr.success(`Password and GDPR settings saved successfully. Session time: ${sessionTime}s, Engagement: ${engagement}%.`);
 
       if (redirect) {
         setTimeout(() => {
+          // It might be React Router and in this case it will be useNavigate().navigate(redirect);
           window.location.href = redirect;
         }, 5000);
       }
@@ -119,6 +93,10 @@ export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUp
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCompanyChange = (field: keyof Company) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCompany({ ...company, [field]: e.target.value });
   };
 
   // Treat screen widths 768px or smaller as mobile
@@ -132,11 +110,9 @@ export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUp
     setPasswordSecond('');
     setPasswordError('');
     setGdpr(false);
-    setCompany(initialCompany || '');
+    setCompany({ name: '', email: '', location: '' });
     setCompanyError('');
     setSaving(false);
-    setSessionTime(0);
-    setEngagementTime(0);
   };
 
   return isMobileDevice() ? (
@@ -153,7 +129,7 @@ export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUp
       <GdprOptIn
         gdpr={gdpr}
         company={company}
-        handleCompanyChange={(e) => setCompany(e.target.value)}
+        handleCompanyChange={handleCompanyChange}
         handleGdprChange={setGdpr}
         companyError={companyError}
       />
@@ -172,66 +148,3 @@ export function GdprUpdatePassword({ redirect, company: initialCompany }: GdprUp
     </div>
   );
 }
-
-type SaveResponse = {
-  success: boolean;
-  error?: string;
-}
-
-type SaveGdprParams = {
-  gdpr: boolean;
-  company: string;
-  sessionTime: number;
-  engagement: number;
-}
-
-const saveGdpr = async ({gdpr, company, sessionTime, engagement}: SaveGdprParams): Promise<SaveResponse> => {
-  try {
-    const response = await axios.post<SaveResponse>('/manage/settings/general/save-gdpr', {
-      gdpr,
-      company,
-      sessionTime,
-      engagement
-    });
-
-    return response.data; // Return the server response data
-  } catch (error: any) {
-    if (error.response) {
-      // Server responded with a status other than 2xx
-      throw new Error(error.response.data.error || 'Error saving GDPR settings');
-    } else if (error.request) {
-      // No response received
-      throw new Error('No response from server');
-    } else {
-      // Some other error occurred
-      throw new Error(error.message);
-    }
-  }
-};
-
-const savePassword = async (password: string): Promise<SaveResponse> => {
-  try {
-    const response = await axios.post<SaveResponse>('/manage/settings/general/save-strong-password', {
-      password,
-    });
-
-    return response.data; // Return the server response data
-  } catch (error: any) {
-    if (error.response) {
-      // Server responded with a status other than 2xx
-      throw new Error(error.response.data.error || 'Error saving password');
-    } else if (error.request) {
-      // No response received
-      throw new Error('No response from server');
-    } else {
-      // Some other error occurred
-      throw new Error(error.message);
-    }
-  }
-};
-
-const validatePassword = (password: string) => {
-  const passwordRegex = /^(?=.*[A-Z])(?=.*\d)[A-Za-z\d]{8,}$/;
-  return passwordRegex.test(password);
-};
-
